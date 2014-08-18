@@ -338,7 +338,7 @@ public class Denormaliser extends BaseStep implements StepInterface
                         	}
                             break;
                         case DenormaliserTargetField.TYPE_AGGR_MIN:
-                            if (sourceMeta.compare(sourceData, targetMeta, prevTargetData)<0) {
+                            if ((prevTargetData == null) || sourceMeta.compare(sourceData, targetMeta, prevTargetData)<0) {
                             	prevTargetData = targetMeta.convertData(sourceMeta, sourceData);
                             }
                             break;

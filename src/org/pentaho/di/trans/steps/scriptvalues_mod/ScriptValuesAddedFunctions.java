@@ -22,51 +22,10 @@
 
 package org.pentaho.di.trans.steps.scriptvalues_mod;
 
-import java.io.BufferedReader;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.Reader;
-import java.net.InetAddress;
-import java.nio.ByteBuffer;
-import java.nio.CharBuffer;
-import java.nio.charset.Charset;
-import java.nio.charset.CharsetDecoder;
-import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
-import java.text.DateFormat;
-import java.text.DecimalFormat;
-import java.text.DecimalFormatSymbols;
-import java.text.Format;
-import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Calendar;
-import java.util.List;
-import java.util.Locale;
-import java.util.Properties;
-import java.util.TimeZone;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
-import javax.mail.Message;
-import javax.mail.Session;
-import javax.mail.Transport;
-import javax.mail.internet.InternetAddress;
-import javax.mail.internet.MimeMessage;
-
 import org.apache.commons.vfs.FileObject;
 import org.apache.commons.vfs.FileType;
 import org.apache.commons.vfs.FileUtil;
-import org.mozilla.javascript.Context;
-import org.mozilla.javascript.EvaluatorException;
-import org.mozilla.javascript.Function;
-import org.mozilla.javascript.JavaScriptException;
-import org.mozilla.javascript.Scriptable;
-import org.mozilla.javascript.ScriptableObject;
-import org.mozilla.javascript.WrappedException;
+import org.mozilla.javascript.*;
 import org.pentaho.di.core.Const;
 import org.pentaho.di.core.database.Database;
 import org.pentaho.di.core.database.DatabaseMeta;
@@ -80,6 +39,24 @@ import org.pentaho.di.core.variables.VariableSpace;
 import org.pentaho.di.core.vfs.KettleVFS;
 import org.pentaho.di.trans.step.StepInterface;
 import org.pentaho.di.trans.steps.loadfileinput.LoadFileInput;
+
+import javax.mail.Message;
+import javax.mail.Session;
+import javax.mail.Transport;
+import javax.mail.internet.InternetAddress;
+import javax.mail.internet.MimeMessage;
+import java.io.*;
+import java.net.InetAddress;
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
+import java.nio.charset.Charset;
+import java.nio.charset.CharsetDecoder;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.text.*;
+import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 
 
@@ -1463,16 +1440,16 @@ public class ScriptValuesAddedFunctions extends ScriptableObject {
 
 		return sRC;
 	}
-	
-	
-	// Loading additional JS Files inside the JavaScriptCode
-	public static void LoadScriptFile(Context actualContext, Scriptable actualObject, Object[] ArgList, Function FunctionContext) {
-		for (int i = 0; i < ArgList.length; i++) { // don't worry about "undefined" arguments
-			checkAndLoadJSFile(actualContext,actualObject,Context.toString(ArgList[i]));
-		}
-	}
-	
-	// Adding the ScriptsItemTab to the actual running Context
+
+
+    // Loading additional JS Files inside the JavaScriptCode
+    public static void LoadScriptFile(Context actualContext, Scriptable actualObject, Object[] ArgList, Function FunctionContext) {
+        for (int i = 0; i < ArgList.length; i++) { // don't worry about "undefined" arguments
+            checkAndLoadJSFile(actualContext, actualObject, Context.toString(ArgList[i]));
+        }
+    }
+
+    // Adding the ScriptsItemTab to the actual running Context
 	public static void LoadScriptFromTab(Context actualContext, Scriptable actualObject, Object[] ArgList, Function FunctionContext) {
 		try{
 			for (int i = 0; i < ArgList.length; i++) { // don't worry about "undefined" arguments
@@ -1507,7 +1484,7 @@ public class ScriptValuesAddedFunctions extends ScriptableObject {
 	private static void checkAndLoadJSFile(Context actualContext, Scriptable eval_scope, String fileName) {
 	    Reader inStream = null;
 	    try {
-	      inStream = new InputStreamReader(KettleVFS.getInputStream(fileName));
+	      inStream = new InputStreamReader(KettleVFS.getInputStream(fileName), "UTF-8");
 	      actualContext.evaluateReader(eval_scope, inStream, fileName, 1, null);
 	    } catch (FileNotFoundException Signal) {
 	    	Context.reportError("Unable to open file \"" + fileName + "\" (reason: \"" + Signal.getMessage() + "\")");

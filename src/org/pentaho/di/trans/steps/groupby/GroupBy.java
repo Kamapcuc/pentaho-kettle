@@ -22,41 +22,27 @@
 
 package org.pentaho.di.trans.steps.groupby;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
+import org.pentaho.di.core.Const;
+import org.pentaho.di.core.exception.KettleException;
+import org.pentaho.di.core.exception.KettleFileException;
+import org.pentaho.di.core.exception.KettleValueException;
+import org.pentaho.di.core.row.*;
+import org.pentaho.di.i18n.BaseMessages;
+import org.pentaho.di.trans.Trans;
+import org.pentaho.di.trans.TransMeta;
+import org.pentaho.di.trans.step.*;
+
+import java.io.*;
 import java.math.BigDecimal;
 import java.net.SocketTimeoutException;
 import java.util.ArrayList;
 import java.util.Set;
 import java.util.TreeSet;
 
-import org.pentaho.di.core.Const;
-import org.pentaho.di.core.exception.KettleException;
-import org.pentaho.di.core.exception.KettleFileException;
-import org.pentaho.di.core.exception.KettleValueException;
-import org.pentaho.di.core.row.RowDataUtil;
-import org.pentaho.di.core.row.RowMeta;
-import org.pentaho.di.core.row.RowMetaInterface;
-import org.pentaho.di.core.row.ValueDataUtil;
-import org.pentaho.di.core.row.ValueMeta;
-import org.pentaho.di.core.row.ValueMetaInterface;
-import org.pentaho.di.i18n.BaseMessages;
-import org.pentaho.di.trans.Trans;
-import org.pentaho.di.trans.TransMeta;
-import org.pentaho.di.trans.step.BaseStep;
-import org.pentaho.di.trans.step.StepDataInterface;
-import org.pentaho.di.trans.step.StepInterface;
-import org.pentaho.di.trans.step.StepMeta;
-import org.pentaho.di.trans.step.StepMetaInterface;
-
 
 /**
  * Groups informations based on aggregation rules. (sum, count, ...)
- * 
+ *
  * @author Matt
  * @since 2-jun-2003
  */
@@ -66,28 +52,28 @@ public class GroupBy extends BaseStep implements StepInterface
 
 	private GroupByMeta meta;
 	private GroupByData data;
-	
+
 	public GroupBy(StepMeta stepMeta, StepDataInterface stepDataInterface, int copyNr, TransMeta transMeta, Trans trans)
 	{
 		super(stepMeta, stepDataInterface, copyNr, transMeta, trans);
-		
+
 		meta=(GroupByMeta)getStepMeta().getStepMetaInterface();
 		data=(GroupByData)stepDataInterface;
 	}
-	
+
 	public boolean processRow(StepMetaInterface smi, StepDataInterface sdi) throws KettleException
 	{
         meta=(GroupByMeta)smi;
         data=(GroupByData)sdi;
-        
+
         Object[] r=getRow();    // get row!
-        
+
 		if (first)
 		{
         	// What is the output looking like?
-        	// 
+        	//
         	data.inputRowMeta = getInputRowMeta();
-        	
+
         	// In case we have 0 input rows, we still want to send out a single row aggregate
         	// However... the problem then is that we don't know the layout from receiving it from the previous step over the row set.
         	// So we need to calculated based on the metadata...
@@ -99,7 +85,7 @@ public class GroupBy extends BaseStep implements StepInterface
 
         	data.outputRowMeta = data.inputRowMeta.clone();
         	meta.getFields(data.outputRowMeta, getStepname(), null, null, this);
-        	
+
         	// Do all the work we can beforehand
         	// Calculate indexes, loop up fields, etc.
         	//
@@ -108,10 +94,10 @@ public class GroupBy extends BaseStep implements StepInterface
 
 			data.cumulativeSumSourceIndexes = new ArrayList<Integer>();
 			data.cumulativeSumTargetIndexes = new ArrayList<Integer>();
-			
+
 			data.cumulativeAvgSourceIndexes = new ArrayList<Integer>();
 			data.cumulativeAvgTargetIndexes = new ArrayList<Integer>();
-			
+
 			for (int i=0;i<meta.getSubjectField().length;i++)
 			{
 				data.subjectnrs[i] = data.inputRowMeta.indexOfValue(meta.getSubjectField()[i]);
@@ -122,11 +108,11 @@ public class GroupBy extends BaseStep implements StepInterface
 					stopAll();
 					return false;
 				}
-				
+
 				if (meta.getAggregateType()[i]==GroupByMeta.TYPE_GROUP_CUMULATIVE_SUM)
 				{
 					data.cumulativeSumSourceIndexes.add(data.subjectnrs[i]);
-					
+
 					// The position of the target in the output row is the input row size + i
 					//
 					data.cumulativeSumTargetIndexes.add(data.inputRowMeta.size()+i);
@@ -139,14 +125,14 @@ public class GroupBy extends BaseStep implements StepInterface
 					//
 					data.cumulativeAvgTargetIndexes.add(data.inputRowMeta.size()+i);
 				}
-				
+
 			}
-			
+
 			data.previousSums = new Object[data.cumulativeSumTargetIndexes.size()];
-			
+
 			data.previousAvgSum = new Object[data.cumulativeAvgTargetIndexes.size()];
 			data.previousAvgCount = new long[data.cumulativeAvgTargetIndexes.size()];
-			
+
 			data.groupnrs = new int[meta.getGroupField().length];
 			for (int i=0;i<meta.getGroupField().length;i++)
 			{
@@ -157,25 +143,25 @@ public class GroupBy extends BaseStep implements StepInterface
 					setErrors(1);
 					stopAll();
 					return false;
-				}				
+				}
 			}
-			
+
 			// Create a metadata value for the counter Integers
 			//
 			data.valueMetaInteger = new ValueMeta("count", ValueMetaInterface.TYPE_INTEGER);
 			data.valueMetaNumber = new ValueMeta("sum", ValueMetaInterface.TYPE_NUMBER);
-			
+
 			// Initialize the group metadata
 			//
 			initGroupMeta(data.inputRowMeta);
 		}
-        
+
         if (first || data.newBatch) {
           // Create a new group aggregate (init)
           //
           newAggregate(r);
         }
-        
+
         if (first) {
           // for speed: groupMeta+aggMeta
           //
@@ -183,14 +169,14 @@ public class GroupBy extends BaseStep implements StepInterface
           data.groupAggMeta.addRowMeta(data.groupMeta);
           data.groupAggMeta.addRowMeta(data.aggMeta);
         }
-        
+
 		if (r==null)  // no more input to be expected... (or none received in the first place)
 		{
 		    handleLastOfGroup();
 			setOutputDone();
 			return false;
 		}
-        
+
     if (first || data.newBatch) {
       first = false;
       data.newBatch = false;
@@ -204,17 +190,17 @@ public class GroupBy extends BaseStep implements StepInterface
         addToBuffer(data.previous);
       }
     }
-				
+
 		// System.out.println("Check for same group...");
-        
+
 		if (!sameGroup(data.previous, r))
 		{
             // System.out.println("Different group!");
-            
+
             if (meta.passAllRows())
             {
                 // System.out.println("Close output...");
-                
+
                 // Not the same group: close output (if any)
                 closeOutput();
 
@@ -226,7 +212,7 @@ public class GroupBy extends BaseStep implements StepInterface
                 // System.out.println("dump rows from the buffer");
 
                 Object[] row = getRowFromBuffer();
-                
+
                 long lineNr=0;
                 while (row!=null)
                 {
@@ -234,9 +220,9 @@ public class GroupBy extends BaseStep implements StepInterface
 
                     row=RowDataUtil.addRowData(row, size, data.groupResult);
                 	size+=data.groupResult.length;
-                	
+
                 	lineNr++;
-                    
+
                     if (meta.isAddingLineNrInGroup() && !Const.isEmpty(meta.getLineNrInGroupField()))
                     {
                     	Object lineNrValue= new Long(lineNr);
@@ -245,10 +231,10 @@ public class GroupBy extends BaseStep implements StepInterface
                     	row=RowDataUtil.addValueData(row, size, lineNrValue);
                     	size++;
                     }
-                    
+
                     addCumulativeSums(row);
                     addCumulativeAverages(row);
-                    
+
                     putRow(data.outputRowMeta, row);
                     row = getRowFromBuffer();
                 }
@@ -266,14 +252,14 @@ public class GroupBy extends BaseStep implements StepInterface
 
 		data.previous=data.inputRowMeta.cloneRow(r);
 
-		if (checkFeedback(getLinesRead())) 
+		if (checkFeedback(getLinesRead()))
 		{
 			if(log.isBasic()) logBasic(BaseMessages.getString(PKG, "GroupBy.LineNumber")+getLinesRead()); //$NON-NLS-1$
 		}
-			
+
 		return true;
 	}
-	
+
 	private void handleLastOfGroup() throws KettleException {
       if (meta.passAllRows())  // ALL ROWS
       {
@@ -285,8 +271,8 @@ public class GroupBy extends BaseStep implements StepInterface
           data.groupResult = getAggregateResult();
 
           Object[] row = getRowFromBuffer();
-          
-          
+
+
           long lineNr=0;
           while (row!=null)
           {
@@ -294,7 +280,7 @@ public class GroupBy extends BaseStep implements StepInterface
               row=RowDataUtil.addRowData(row, size, data.groupResult);
               size+=data.groupResult.length;
               lineNr++;
-              
+
               if (meta.isAddingLineNrInGroup() && !Const.isEmpty(meta.getLineNrInGroupField()))
               {
                   Object lineNrValue= new Long(lineNr);
@@ -303,10 +289,10 @@ public class GroupBy extends BaseStep implements StepInterface
                   row=RowDataUtil.addValueData(row, size, lineNrValue);
                   size++;
               }
-              
+
               addCumulativeSums(row);
               addCumulativeAverages(row);
-              
+
               putRow(data.outputRowMeta, row);
               row = getRowFromBuffer();
           }
@@ -315,10 +301,10 @@ public class GroupBy extends BaseStep implements StepInterface
       else   // JUST THE GROUP + AGGREGATE
       {
           // Don't forget the last set of rows...
-          if (data.previous!=null) 
+          if (data.previous!=null)
           {
               calcAggregate(data.previous);
-          } 
+          }
           Object[] result = buildResult(data.previous);
           if (result!=null) {
               putRow(data.groupAggMeta, result);
@@ -335,9 +321,9 @@ public class GroupBy extends BaseStep implements StepInterface
         	int sourceIndex = data.cumulativeSumSourceIndexes.get(i);
         	Object previousTarget = data.previousSums[i];
         	Object sourceValue = row[sourceIndex];
-        	
+
         	int targetIndex = data.cumulativeSumTargetIndexes.get(i);
-        	
+
         	ValueMetaInterface sourceMeta = data.inputRowMeta.getValueMeta(sourceIndex);
     		ValueMetaInterface targetMeta = data.outputRowMeta.getValueMeta(targetIndex);
 
@@ -364,7 +350,7 @@ public class GroupBy extends BaseStep implements StepInterface
         }
 
 	}
-	
+
 	private void addCumulativeAverages(Object[] row) throws KettleValueException {
 
 		// We need to adjust this row with cumulative sums
@@ -374,16 +360,16 @@ public class GroupBy extends BaseStep implements StepInterface
         	int sourceIndex = data.cumulativeAvgSourceIndexes.get(i);
         	Object previousTarget = data.previousAvgSum[i];
         	Object sourceValue = row[sourceIndex];
-        	
+
         	int targetIndex = data.cumulativeAvgTargetIndexes.get(i);
-        	
+
         	ValueMetaInterface sourceMeta = data.inputRowMeta.getValueMeta(sourceIndex);
     		ValueMetaInterface targetMeta = data.outputRowMeta.getValueMeta(targetIndex);
 
     		// If the first values where null, or this is the first time around, just take the source value...
     		//
     		Object sum = null;
-    		
+
         	if (targetMeta.isNull(previousTarget))
         	{
         		sum=sourceMeta.convertToNormalStorageType(sourceValue);
@@ -411,7 +397,7 @@ public class GroupBy extends BaseStep implements StepInterface
         	data.previousAvgSum[i] = sum;
 
         	if (!sourceMeta.isNull(sourceValue)) data.previousAvgCount[i]++;
-        	
+
         	if (sourceMeta.isInteger()) {
         		// Change to number as the exception
         		//
@@ -419,7 +405,7 @@ public class GroupBy extends BaseStep implements StepInterface
         		{
         			row[targetIndex] = null;
         		}
-        		else 
+        		else
         		{
         			row[targetIndex] = new Double( ((Long)sum).doubleValue() / data.previousAvgCount[i] );
         		}
@@ -437,7 +423,7 @@ public class GroupBy extends BaseStep implements StepInterface
 	{
 		return data.inputRowMeta.compare(previous, r, data.groupnrs) == 0;
 	}
-	
+
 	// Calculate the aggregates in the row...
 	@SuppressWarnings("unchecked")
 	private void calcAggregate(Object[] r) throws KettleValueException
@@ -448,20 +434,20 @@ public class GroupBy extends BaseStep implements StepInterface
 			ValueMetaInterface subjMeta=data.inputRowMeta.getValueMeta(data.subjectnrs[i]);
 			Object value = data.agg[i];
 			ValueMetaInterface valueMeta=data.aggMeta.getValueMeta(i);
-			
+
 			//System.out.println("  calcAggregate value, i="+i+", agg.size()="+agg.size()+", subj="+subj+", value="+value);
-			
+
 			switch(meta.getAggregateType()[i])
 			{
 				case GroupByMeta.TYPE_GROUP_SUM            :
 					data.agg[i]=ValueDataUtil.sum(valueMeta, value, subjMeta, subj);
-					break; 
+					break;
 				case GroupByMeta.TYPE_GROUP_AVERAGE        :
 					if (!subjMeta.isNull(subj)) {
 						data.agg[i]=ValueDataUtil.sum(valueMeta, value, subjMeta, subj);
 						data.counts[i]++;
 					}
-					break; 
+					break;
 				case GroupByMeta.TYPE_GROUP_STANDARD_DEVIATION :
           if (!subjMeta.isNull(subj)) {
   					data.counts[i]++;
@@ -469,15 +455,15 @@ public class GroupBy extends BaseStep implements StepInterface
   					double x = subjMeta.getNumber(subj);
   					double sum = (Double)value;
   					double mean = data.mean[i];
-  					
+
   					double delta = x - mean;
   					mean = mean + (delta/n);
   					sum = sum + delta*(x-mean);
-  					
+
   					data.mean[i] = mean;
   					data.agg[i] = sum;
           }
-					break; 
+					break;
 				case GroupByMeta.TYPE_GROUP_COUNT_DISTINCT :
 				  if (!subjMeta.isNull(subj)) {
 				    if (data.distinctObjs == null) {
@@ -500,11 +486,13 @@ public class GroupBy extends BaseStep implements StepInterface
 				case GroupByMeta.TYPE_GROUP_MIN            :
 				  if(subjMeta.isSortedDescending()) {
 				    // Account for negation in ValueMeta.compare() - See PDI-2302
-				    if (subjMeta.compare(value,valueMeta,subj)<0) data.agg[i]=subj;
+				    if ((subj != null) && ((subjMeta.compare(value, valueMeta, subj) < 0) || (data.agg[i] == null)))
+                        data.agg[i]=subj;
 				  } else {
-				    if (subjMeta.compare(subj,valueMeta,value)<0) data.agg[i]=subj;
+				    if ((subj != null) && ((subjMeta.compare(subj, valueMeta, value) < 0) || (data.agg[i] == null)))
+                        data.agg[i]=subj;
 				  }
-					break; 
+					break;
 				case GroupByMeta.TYPE_GROUP_MAX            :
 				  if(subjMeta.isSortedDescending()) {
 				    // Account for negation in ValueMeta.compare() - See PDI-2302
@@ -512,24 +500,24 @@ public class GroupBy extends BaseStep implements StepInterface
 				  } else {
 				    if (subjMeta.compare(subj,valueMeta,value)>0) data.agg[i]=subj;
 				  }
-					break; 
+					break;
                 case GroupByMeta.TYPE_GROUP_FIRST          :
                     if (!(subj==null) && value==null) data.agg[i]=subj;
-                    break; 
-                case GroupByMeta.TYPE_GROUP_LAST           : 
-                    if (!(subj==null)) data.agg[i]=subj; 
-                    break; 
+                    break;
+                case GroupByMeta.TYPE_GROUP_LAST           :
+                    if (!(subj==null)) data.agg[i]=subj;
+                    break;
                 case GroupByMeta.TYPE_GROUP_FIRST_INCL_NULL:
-                	// This is on purpose. The calculation of the 
+                	// This is on purpose. The calculation of the
                 	// first field is done when setting up a new group
                 	// This is just the field of the first row
                     // if (linesWritten==0) value.setValue(subj);
-                    break; 
-                case GroupByMeta.TYPE_GROUP_LAST_INCL_NULL : 
-                	data.agg[i]=subj; 
-                    break; 
+                    break;
+                case GroupByMeta.TYPE_GROUP_LAST_INCL_NULL :
+                	data.agg[i]=subj;
+                    break;
                 case GroupByMeta.TYPE_GROUP_CONCAT_COMMA   :
-                    if (!(subj==null)) 
+                    if (!(subj==null))
                     {
                     	  StringBuilder sb = (StringBuilder) value;
                         if(sb.length()>0){
@@ -537,21 +525,21 @@ public class GroupBy extends BaseStep implements StepInterface
                         }
                         sb.append(subjMeta.getString(subj));
                     }
-                    break; 
+                    break;
                 case GroupByMeta.TYPE_GROUP_CONCAT_STRING   :
-                    if (!(subj==null)) 
+                    if (!(subj==null))
                     {
                     	String separator="";
                     	if(!Const.isEmpty(meta.getValueField()[i])) separator=environmentSubstitute(meta.getValueField()[i]);
-                    	
+
                         StringBuilder sb = (StringBuilder) value;
                         if(sb.length()>0){
                             sb.append(separator);
                         }
                         sb.append(subjMeta.getString(subj));
                     }
-                    
-                    break; 
+
+                    break;
 				default: break;
 			}
 		}
@@ -566,7 +554,7 @@ public class GroupBy extends BaseStep implements StepInterface
 		data.agg = new Object[data.subjectnrs.length];
 		data.mean = new double[data.subjectnrs.length]; // sets all doubles to 0.0
 		data.aggMeta=new RowMeta();
-		
+
 		for (int i=0;i<data.subjectnrs.length;i++)
 		{
 			ValueMetaInterface subjMeta=data.inputRowMeta.getValueMeta(data.subjectnrs[i]);
@@ -574,19 +562,19 @@ public class GroupBy extends BaseStep implements StepInterface
 			ValueMetaInterface vMeta=null;
 			switch(meta.getAggregateType()[i])
 			{
-				case GroupByMeta.TYPE_GROUP_SUM            : 
+				case GroupByMeta.TYPE_GROUP_SUM            :
 				case GroupByMeta.TYPE_GROUP_AVERAGE        :
-				case GroupByMeta.TYPE_GROUP_CUMULATIVE_SUM : 
+				case GroupByMeta.TYPE_GROUP_CUMULATIVE_SUM :
 				case GroupByMeta.TYPE_GROUP_CUMULATIVE_AVERAGE :
                     vMeta = new ValueMeta(meta.getAggregateField()[i], subjMeta.isNumeric()?subjMeta.getType():ValueMetaInterface.TYPE_NUMBER);
                     switch(subjMeta.getType())
                     {
                     case ValueMetaInterface.TYPE_BIGNUMBER: v=new BigDecimal("0"); break;
                     case ValueMetaInterface.TYPE_INTEGER:   v=new Long(0L); break;
-                    case ValueMetaInterface.TYPE_NUMBER:    
+                    case ValueMetaInterface.TYPE_NUMBER:
                     default:                         v=new Double(0.0); break;
                     }
-					break; 					
+					break;
 				case GroupByMeta.TYPE_GROUP_STANDARD_DEVIATION :
                     vMeta = new ValueMeta(meta.getAggregateField()[i], ValueMetaInterface.TYPE_NUMBER);
                     v=new Double(0.0);
@@ -594,32 +582,32 @@ public class GroupBy extends BaseStep implements StepInterface
 				case GroupByMeta.TYPE_GROUP_COUNT_DISTINCT  :
 				case GroupByMeta.TYPE_GROUP_COUNT_ALL       :
                     vMeta = new ValueMeta(meta.getAggregateField()[i], ValueMetaInterface.TYPE_INTEGER);
-                    v=new Long(0L);                   
-					break; 
+                    v=new Long(0L);
+					break;
 				case GroupByMeta.TYPE_GROUP_FIRST           :
 				case GroupByMeta.TYPE_GROUP_LAST            :
 				case GroupByMeta.TYPE_GROUP_FIRST_INCL_NULL :
-				case GroupByMeta.TYPE_GROUP_LAST_INCL_NULL  :					
-				case GroupByMeta.TYPE_GROUP_MIN             : 
-				case GroupByMeta.TYPE_GROUP_MAX             : 
+				case GroupByMeta.TYPE_GROUP_LAST_INCL_NULL  :
+				case GroupByMeta.TYPE_GROUP_MIN             :
+				case GroupByMeta.TYPE_GROUP_MAX             :
 					vMeta = subjMeta.clone();
 					vMeta.setName(meta.getAggregateField()[i]);
-					v = r==null ? null : r[data.subjectnrs[i]]; 
+					v = r==null ? null : r[data.subjectnrs[i]];
 					break;
                 case GroupByMeta.TYPE_GROUP_CONCAT_COMMA    :
                     vMeta = new ValueMeta(meta.getAggregateField()[i], ValueMetaInterface.TYPE_STRING);
                     v = new StringBuilder(); //$NON-NLS-1$
-                    break; 
+                    break;
                 case GroupByMeta.TYPE_GROUP_CONCAT_STRING   :
                     vMeta = new ValueMeta(meta.getAggregateField()[i], ValueMetaInterface.TYPE_STRING);
                     v = new StringBuilder(); //$NON-NLS-1$
-                    break; 
-				default: 
+                    break;
+				default:
 					// TODO raise an error here because we cannot continue successfully maybe the UI should validate this
 					break;
 			}
-            
-            if (meta.getAggregateType()[i]!=GroupByMeta.TYPE_GROUP_COUNT_ALL && 
+
+            if (meta.getAggregateType()[i]!=GroupByMeta.TYPE_GROUP_COUNT_ALL &&
                 meta.getAggregateType()[i]!=GroupByMeta.TYPE_GROUP_COUNT_DISTINCT)
             {
             	vMeta.setLength(subjMeta.getLength(), subjMeta.getPrecision());
@@ -627,17 +615,17 @@ public class GroupBy extends BaseStep implements StepInterface
 			if (v!=null) data.agg[i]=v;
 			data.aggMeta.addValueMeta(vMeta);
 		}
-		
+
 		// Also clear the cumulative data...
 		//
 		for (int i=0;i<data.previousSums.length;i++) data.previousSums[i]=null;
-		for (int i=0;i<data.previousAvgCount.length;i++) 
+		for (int i=0;i<data.previousAvgCount.length;i++)
 		{
 			data.previousAvgCount[i]=0L;
 			data.previousAvgSum[i]=null;
 		}
 	}
-	
+
 	private Object[] buildResult(Object[] r) throws KettleValueException
 	{
 		Object[] result=null;
@@ -647,13 +635,13 @@ public class GroupBy extends BaseStep implements StepInterface
 			{
 				for (int i=0;i<data.groupnrs.length;i++)
 				{
-					result[i]=r[data.groupnrs[i]]; 
+					result[i]=r[data.groupnrs[i]];
 				}
 			}
-			
+
 			result=RowDataUtil.addRowData(result, data.groupnrs.length, getAggregateResult());
 		}
-        
+
 		return result;
 	}
 
@@ -664,7 +652,7 @@ public class GroupBy extends BaseStep implements StepInterface
 		{
 			data.groupMeta.addValueMeta(previousRowMeta.getValueMeta(data.groupnrs[i]));
 		}
-        
+
 		return;
 	}
 
@@ -679,21 +667,21 @@ public class GroupBy extends BaseStep implements StepInterface
                 Object ag = data.agg[i];
                 switch(meta.getAggregateType()[i])
                 {
-                    case GroupByMeta.TYPE_GROUP_SUM            : break; 
+                    case GroupByMeta.TYPE_GROUP_SUM            : break;
                     case GroupByMeta.TYPE_GROUP_AVERAGE        :
-                    		ag=ValueDataUtil.divide(data.aggMeta.getValueMeta(i), ag, 
-                    				new ValueMeta("c",ValueMetaInterface.TYPE_INTEGER), new Long(data.counts[i])); 
+                    		ag=ValueDataUtil.divide(data.aggMeta.getValueMeta(i), ag,
+                    				new ValueMeta("c",ValueMetaInterface.TYPE_INTEGER), new Long(data.counts[i]));
                     		break;  //$NON-NLS-1$
                     case GroupByMeta.TYPE_GROUP_COUNT_ALL      : ag=new Long(data.counts[i]); break;
                     case GroupByMeta.TYPE_GROUP_COUNT_DISTINCT : break;
-                    case GroupByMeta.TYPE_GROUP_MIN            : break; 
-                    case GroupByMeta.TYPE_GROUP_MAX            : break; 
+                    case GroupByMeta.TYPE_GROUP_MIN            : break;
+                    case GroupByMeta.TYPE_GROUP_MAX            : break;
                     case GroupByMeta.TYPE_GROUP_STANDARD_DEVIATION :
                     	double sum = (Double)ag / data.counts[i];
                     	ag = Double.valueOf( Math.sqrt( sum ) );
                     	break;
                     case GroupByMeta.TYPE_GROUP_CONCAT_COMMA:;
-                    case GroupByMeta.TYPE_GROUP_CONCAT_STRING: 
+                    case GroupByMeta.TYPE_GROUP_CONCAT_STRING:
                         ag = ((StringBuilder) ag).toString();
                         break;
                     default: break;
@@ -705,7 +693,7 @@ public class GroupBy extends BaseStep implements StepInterface
         return result;
 
     }
-		
+
     private void addToBuffer(Object[] row) throws KettleFileException
     {
         data.bufferList.add(row);
@@ -732,7 +720,7 @@ public class GroupBy extends BaseStep implements StepInterface
             data.rowsOnFile++;
         }
     }
-    
+
     private Object[] getRowFromBuffer() throws KettleFileException
     {
         if (data.rowsOnFile>0)
@@ -751,19 +739,19 @@ public class GroupBy extends BaseStep implements StepInterface
                     throw new KettleFileException(BaseMessages.getString(PKG, "GroupBy.Exception.UnableToReadBackRowFromTemporaryFile"), e); //$NON-NLS-1$
                 }
             }
-            
+
             // Read one row from the file!
             Object[] row;
-			try 
+			try
 			{
 				row = data.inputRowMeta.readData(data.dis);
-			} 
-			catch (SocketTimeoutException e) 
+			}
+			catch (SocketTimeoutException e)
 			{
 				throw new KettleFileException(e); // Shouldn't happen on files
 			}
             data.rowsOnFile--;
-            
+
             return row;
         }
         else
@@ -780,7 +768,7 @@ public class GroupBy extends BaseStep implements StepInterface
             }
         }
     }
-    
+
     private void closeOutput() throws KettleFileException
     {
         try
@@ -794,7 +782,7 @@ public class GroupBy extends BaseStep implements StepInterface
             throw new KettleFileException(BaseMessages.getString(PKG, "GroupBy.Exception.UnableToCloseInputStream"), e); //$NON-NLS-1$
         }
     }
-    
+
     private void closeInput() throws KettleFileException
     {
         try
@@ -808,30 +796,30 @@ public class GroupBy extends BaseStep implements StepInterface
         }
     }
 
-    
+
 	public boolean init(StepMetaInterface smi, StepDataInterface sdi)
 	{
 		meta=(GroupByMeta)smi;
 		data=(GroupByData)sdi;
-		
+
 		if (super.init(smi, sdi))
 		{
             data.bufferList = new ArrayList<Object[]>();
-            
+
             data.rowsOnFile = 0;
-            
+
             return true;
 		}
 		return false;
 	}
-	
-	public void dispose(StepMetaInterface smi, StepDataInterface sdi) 
+
+	public void dispose(StepMetaInterface smi, StepDataInterface sdi)
 	{
 		if (data.tempFile!=null) data.tempFile.delete();
-		
+
 		super.dispose(smi, sdi);
 	}
-	
+
 	public void batchComplete() throws KettleException {
 	  handleLastOfGroup();
 	  data.newBatch=true;

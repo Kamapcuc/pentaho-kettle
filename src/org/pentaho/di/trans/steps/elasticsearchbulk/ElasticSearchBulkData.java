@@ -27,30 +27,26 @@ import org.pentaho.di.trans.step.BaseStepData;
 import org.pentaho.di.trans.step.StepDataInterface;
 
 
-
-
 /*
  * @author webdetails
  * @since 16-02-2011
  */
-public class ElasticSearchBulkData extends BaseStepData implements StepDataInterface 
-{
-	public RowMetaInterface inputRowMeta;
-	public RowMetaInterface outputRowMeta;
+public class ElasticSearchBulkData extends BaseStepData implements StepDataInterface {
+    public RowMetaInterface inputRowMeta;
+    public RowMetaInterface outputRowMeta;
 
-	public int nextBufferRowIdx;
-	
-	public Object[][] inputRowBuffer;
-	
-	/**
-	 * 
-	 */
-	public ElasticSearchBulkData()
-	{
-		super();
+    public int nextBufferRowIdx;
 
-		nextBufferRowIdx=0;
-	}
-	
-	
+    public Object[][] inputRowBuffer;
+
+    /**
+     *
+     */
+    public ElasticSearchBulkData() {
+        super();
+
+        nextBufferRowIdx = 0;
+    }
+
+
 }
