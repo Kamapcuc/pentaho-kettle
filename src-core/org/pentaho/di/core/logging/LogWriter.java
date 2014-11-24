@@ -341,7 +341,7 @@ public class LogWriter {
     public void println(LogMessageInterface message, Throwable e, LogLevel channelLogLevel) {
         println(message, channelLogLevel);
 
-        String stackTrace = Const.getStackTracker(e);
+        String stackTrace = Const.getCustomStackTrace(e);
         LogMessage traceMessage = new LogMessage(stackTrace, message.getLogChannelId(), LogLevel.ERROR);
         println(traceMessage, channelLogLevel);
     }

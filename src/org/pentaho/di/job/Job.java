@@ -22,18 +22,6 @@
 
 package org.pentaho.di.job;
 
-import java.net.URLEncoder;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Timer;
-import java.util.TimerTask;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-
 import org.apache.commons.vfs.FileName;
 import org.apache.commons.vfs.FileObject;
 import org.pentaho.di.cluster.SlaveServer;
@@ -47,21 +35,7 @@ import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.exception.KettleJobException;
 import org.pentaho.di.core.exception.KettleValueException;
 import org.pentaho.di.core.gui.JobTracker;
-import org.pentaho.di.core.logging.CentralLogStore;
-import org.pentaho.di.core.logging.ChannelLogTable;
-import org.pentaho.di.core.logging.DefaultLogLevel;
-import org.pentaho.di.core.logging.HasLogChannelInterface;
-import org.pentaho.di.core.logging.JobEntryLogTable;
-import org.pentaho.di.core.logging.JobLogTable;
-import org.pentaho.di.core.logging.Log4jBufferAppender;
-import org.pentaho.di.core.logging.LogChannel;
-import org.pentaho.di.core.logging.LogChannelInterface;
-import org.pentaho.di.core.logging.LogLevel;
-import org.pentaho.di.core.logging.LogStatus;
-import org.pentaho.di.core.logging.LoggingHierarchy;
-import org.pentaho.di.core.logging.LoggingObjectInterface;
-import org.pentaho.di.core.logging.LoggingObjectType;
-import org.pentaho.di.core.logging.LoggingRegistry;
+import org.pentaho.di.core.logging.*;
 import org.pentaho.di.core.parameters.DuplicateParamException;
 import org.pentaho.di.core.parameters.NamedParams;
 import org.pentaho.di.core.parameters.NamedParamsDefault;
@@ -84,11 +58,12 @@ import org.pentaho.di.repository.RepositoryDirectoryInterface;
 import org.pentaho.di.resource.ResourceUtil;
 import org.pentaho.di.resource.TopLevelResource;
 import org.pentaho.di.trans.Trans;
-import org.pentaho.di.www.AddExportServlet;
-import org.pentaho.di.www.AddJobServlet;
-import org.pentaho.di.www.SocketRepository;
-import org.pentaho.di.www.StartJobServlet;
-import org.pentaho.di.www.WebResult;
+import org.pentaho.di.www.*;
+
+import java.net.URLEncoder;
+import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 
 /**
@@ -364,7 +339,7 @@ public class Job extends Thread implements VariableSpace, NamedParams, HasLogCha
 		}
 		catch(Throwable je)
 		{
-			log.logError(BaseMessages.getString(PKG, "Job.Log.ErrorExecJob", je));
+			log.logError(BaseMessages.getString(PKG, "Job.Log.ErrorExecJob", Const.getCustomStackTrace(je)));
             // log.logError(Const.getStackTracker(je));
             //
             // we don't have result object because execute() threw a curve-ball.
@@ -387,7 +362,7 @@ public class Job extends Thread implements VariableSpace, NamedParams, HasLogCha
 				result.setNrErrors(1);
 				result.setResult(false);
 				emergencyWriteJobTracker( result );
-				log.logError(BaseMessages.getString(PKG, "Job.Log.ErrorExecJob", e.getMessage()), e);
+				log.logError(BaseMessages.getString(PKG, "Job.Log.ErrorExecJob", Const.getCustomStackTrace(e)), e);
 			}
 		}
 	}
@@ -633,7 +608,10 @@ public class Job extends Thread implements VariableSpace, NamedParams, HasLogCha
     // Only keep the last X job entry results in memory
     //
     if (maxJobEntriesLogged>0 && jobEntryResults.size()>maxJobEntriesLogged+50) {
-      jobEntryResults = jobEntryResults.subList(50, jobEntryResults.size()); // Remove the oldest.
+        synchronized(this) {
+            List<JobEntryResult> toDelete = jobEntryResults.subList(0, 50);
+            jobEntryResults.removeAll(toDelete);
+        }
     }
     
 			

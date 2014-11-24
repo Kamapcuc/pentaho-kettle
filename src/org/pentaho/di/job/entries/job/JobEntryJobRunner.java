@@ -22,6 +22,7 @@
 
 package org.pentaho.di.job.entries.job;
 
+import org.pentaho.di.core.Const;
 import org.pentaho.di.core.Result;
 import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.logging.LogChannelInterface;
@@ -81,7 +82,7 @@ public class JobEntryJobRunner implements Runnable
             } catch(KettleException e) {
                 result.setNrErrors(1);
                 result.setResult(false);
-                log.logError(BaseMessages.getString(PKG, "Job.Log.ErrorExecJob", e.getMessage()), e);
+                log.logError(BaseMessages.getString(PKG, "Job.Log.ErrorExecJob", Const.getCustomStackTrace(e)), e);
             }
         }
 		finished=true;
