@@ -1820,21 +1820,16 @@ public class Const {
     return string;
   }
 
-  public static String getCustomStackTrace( Throwable aThrowable ) {
-    final StringBuilder result = new StringBuilder();
-    String errorMessage = aThrowable.toString();
-    result.append( errorMessage );
-    if ( !errorMessage.contains( Const.CR ) ) {
-      result.append( CR );
-    }
-
-    // add each element of the stack trace
-    //
-    for ( StackTraceElement element : aThrowable.getStackTrace() ) {
-      result.append( element );
-      result.append( CR );
-    }
-    return result.toString();
+  public static String getCustomStackTrace(Throwable exception) {
+      final StringBuilder result = new StringBuilder();
+      result.append(exception.toString());
+      result.append(CR);
+      for (StackTraceElement element : exception.getStackTrace()) {
+          result.append('\t');
+          result.append(element.toString());
+          result.append(CR);
+      }
+      return result.toString();
   }
 
   /**

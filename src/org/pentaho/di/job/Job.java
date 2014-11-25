@@ -62,6 +62,7 @@ import org.pentaho.di.www.*;
 
 import java.net.URLEncoder;
 import java.util.*;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -182,13 +183,13 @@ public class Job extends Thread implements VariableSpace, NamedParams, HasLogCha
     active = new AtomicBoolean(false);
     stopped = new AtomicBoolean(false);
     jobTracker = new JobTracker(jobMeta);
-    jobEntryResults = new LinkedList<JobEntryResult>();
+    jobEntryResults = new CopyOnWriteArrayList<JobEntryResult>();
     initialized = new AtomicBoolean(false);
     finished = new AtomicBoolean(false);
     errors = new AtomicInteger(0);
     batchId = -1;
     passedBatchId = -1;
-    maxJobEntriesLogged = Const.toInt(EnvUtil.getSystemProperty(Const.KETTLE_MAX_JOB_ENTRIES_LOGGED), 1000);
+    maxJobEntriesLogged = Const.toInt(EnvUtil.getSystemProperty(Const.KETTLE_MAX_JOB_ENTRIES_LOGGED), 100);
 
     result = null;
     this.setDefaultLogCommitSize();
@@ -601,20 +602,13 @@ public class Job extends Thread implements VariableSpace, NamedParams, HasLogCha
         environmentSubstitute(jobEntryCopy.getEntry().getFilename())
         );
     jobTracker.addJobTracker(new JobTracker(jobMeta, jerAfter));
-    synchronized(this) {
-      jobEntryResults.add(jerAfter);
-    }
+    jobEntryResults.add(jerAfter);
 
     // Only keep the last X job entry results in memory
     //
-    if (maxJobEntriesLogged>0 && jobEntryResults.size()>maxJobEntriesLogged+50) {
-        synchronized(this) {
-            List<JobEntryResult> toDelete = jobEntryResults.subList(0, 50);
-            jobEntryResults.removeAll(toDelete);
-        }
-    }
-    
-			
+    if (maxJobEntriesLogged > 0 && jobEntryResults.size() > maxJobEntriesLogged)
+        jobEntryResults.remove(0);
+
     // Try all next job entries.
     //
     // Keep track of all the threads we fired in case of parallel execution...
