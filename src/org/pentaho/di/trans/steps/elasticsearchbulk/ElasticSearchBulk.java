@@ -39,12 +39,14 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.transport.InetSocketTransportAddress;
 import org.elasticsearch.node.Node;
 import org.elasticsearch.node.NodeBuilder;
+import org.elasticsearch.script.ScriptService;
 import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.exception.KettleStepException;
 import org.pentaho.di.core.row.RowDataUtil;
 import org.pentaho.di.core.row.RowMetaInterface;
 import org.pentaho.di.core.row.ValueMetaInterface;
 import org.pentaho.di.i18n.BaseMessages;
+import org.pentaho.di.job.Job;
 import org.pentaho.di.trans.Trans;
 import org.pentaho.di.trans.TransMeta;
 import org.pentaho.di.trans.step.*;
@@ -64,8 +66,6 @@ import java.util.concurrent.TimeUnit;
  */
 public class ElasticSearchBulk extends BaseStep implements StepInterface {
 
-    public static Client OVERRIDDEN_CLIENT = null;
-
     private static final Charset UTF = Charset.forName("UTF-8");
 
     private static final String KEY = "params";
@@ -76,8 +76,9 @@ public class ElasticSearchBulk extends BaseStep implements StepInterface {
 
     //TransportClient tc;
 
-    private Node node;
+    private Node node = null;
     private Client client;
+    private boolean externalClient = false;
     private String index;
     private String type;
     private OperationType operationType;
@@ -252,7 +253,7 @@ public class ElasticSearchBulk extends BaseStep implements StepInterface {
                         UpdateRequestBuilder updateRequestBuilder = client.prepareUpdate(index, type, row[idFieldIndex].toString());
                         if (parentFieldIndex != null)
                             updateRequestBuilder.setParent(row[parentFieldIndex].toString());
-                        updateRequestBuilder.setScript(script);
+                        updateRequestBuilder.setScript(script, ScriptService.ScriptType.INLINE);
                         Map<String, Object> params = new HashMap<String, Object>();
                         if (isJsonInsert)
                             params.put(KEY, getSourceFromJsonString(row));
@@ -472,6 +473,16 @@ public class ElasticSearchBulk extends BaseStep implements StepInterface {
         }
     }
 
+    private Job getRootJob() {
+        Job current = getTrans().getParentJob();
+        Job previous = null;
+        while (current != null) {
+            previous = current;
+            current = current.getParentJob();
+        }
+        return previous;
+    }
+
     private void initClient() {
 
         ImmutableSettings.Builder settingsBuilder = ImmutableSettings.settingsBuilder();
@@ -479,11 +490,11 @@ public class ElasticSearchBulk extends BaseStep implements StepInterface {
         settingsBuilder.put(meta.getSettings());
         Settings settings = settingsBuilder.build();
 
-        if (OVERRIDDEN_CLIENT != null) {
-            node = null;
-            client = OVERRIDDEN_CLIENT;
+        Job rootJob = getRootJob();
+        if (rootJob instanceof ExternalClientJob) {
+            client = ((ExternalClientJob) rootJob).getClient();
+            externalClient = true;
         } else if (meta.getServers().length > 0) {
-            node = null;
             TransportClient tClient = new TransportClient(settings);
             for (InetSocketTransportAddress address : meta.getServersAddresses(this)) {
                 tClient.addTransportAddress(address);
@@ -492,14 +503,14 @@ public class ElasticSearchBulk extends BaseStep implements StepInterface {
         } else {
             NodeBuilder nodeBuilder = NodeBuilder.nodeBuilder();
             nodeBuilder.settings(settings);
-            node = nodeBuilder.client(true).node();// this node will not hold data
+            node = nodeBuilder.client(true).node(); // this node will not hold data
             client = node.client();
             node.start();
         }
     }
 
     private void disposeClient() {
-        if (client != OVERRIDDEN_CLIENT) {
+        if (!externalClient) {
             if (client != null) {
                 client.close();
             }
