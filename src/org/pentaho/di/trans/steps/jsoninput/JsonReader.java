@@ -22,21 +22,20 @@
 
 package org.pentaho.di.trans.steps.jsoninput;
 
-import java.io.BufferedReader;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.net.URL;
-
-import javax.script.Invocable;
-import javax.script.ScriptEngine;
-import javax.script.ScriptEngineManager;
-
+import com.sun.phobos.script.javascript.RhinoScriptEngineFactory;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONValue;
 import org.jsonpath.JsonJar;
 import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.vfs.KettleVFS;
 import org.pentaho.di.i18n.BaseMessages;
+
+import javax.script.Invocable;
+import javax.script.ScriptEngine;
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.net.URL;
 
 public class JsonReader {
 	private static Class<?> PKG = JsonInputMeta.class; // for i18n purposes, needed by Translator2!!   $NON-NLS-1$
@@ -63,9 +62,10 @@ public class JsonReader {
 	private void init() throws KettleException {
 		
 		try {
-			
-			ScriptEngineManager sm = new ScriptEngineManager();
-			setEngine(sm.getEngineByName(JAVA_SCRIPT));
+            RhinoScriptEngineFactory z = new RhinoScriptEngineFactory(null, true);
+            z.initialize();
+            ScriptEngine x = z.getScriptEngine();
+			setEngine(x);
 			if (getEngine() == null) {
 				throw new KettleException(BaseMessages.getString(PKG, "JsonReader.Error.NoScriptEngineFound"));
 			}
