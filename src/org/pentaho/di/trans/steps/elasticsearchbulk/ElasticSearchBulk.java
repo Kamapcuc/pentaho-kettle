@@ -23,6 +23,7 @@
 package org.pentaho.di.trans.steps.elasticsearchbulk;
 
 import org.apache.commons.lang.StringUtils;
+import org.codehaus.jackson.map.ObjectMapper;
 import org.elasticsearch.action.ListenableActionFuture;
 import org.elasticsearch.action.bulk.BulkItemResponse;
 import org.elasticsearch.action.bulk.BulkRequestBuilder;
@@ -113,6 +114,8 @@ public class ElasticSearchBulk extends BaseStep implements StepInterface {
     private Map<String, Integer> fieldPositions;
     private PreparedMap preparedMap;
 
+    private final ObjectMapper mapper = new ObjectMapper();
+
     public ElasticSearchBulk(StepMeta stepMeta, StepDataInterface stepDataInterface, int copyNr, TransMeta transMeta,
                              Trans trans) {
         super(stepMeta, stepDataInterface, copyNr, transMeta, trans);
@@ -156,7 +159,7 @@ public class ElasticSearchBulk extends BaseStep implements StepInterface {
 
         try {
             data.inputRowBuffer[data.nextBufferRowIdx++] = rowData;
-            return indexRow(rowData) || !stopOnError;
+            return indexRow(rowData);
         } catch (KettleStepException e) {
             throw e;
         } catch (Exception e) {
@@ -252,14 +255,16 @@ public class ElasticSearchBulk extends BaseStep implements StepInterface {
                     if (idFieldIndex != null) {
                         UpdateRequestBuilder updateRequestBuilder = client.prepareUpdate(index, type, row[idFieldIndex].toString());
                         if (parentFieldIndex != null)
-                            updateRequestBuilder.setParent(row[parentFieldIndex].toString());
-                        updateRequestBuilder.setScript(script, ScriptService.ScriptType.INLINE);
-                        Map<String, Object> params = new HashMap<String, Object>();
-                        if (isJsonInsert)
-                            params.put(KEY, getSourceFromJsonString(row));
-                        else
+                            updateRequestBuilder.setRouting(row[parentFieldIndex].toString());
+                        updateRequestBuilder.setScript(script, ScriptService.ScriptType.INDEXED);
+                        Map<String, Object> params;
+                        if (isJsonInsert) {
+                            params = getMapFromJsonString(row);
+                        } else {
+                            params = new HashMap<String, Object>();
                             for (Map.Entry<String, Object> entry : getSourceFromRowFields(row).entrySet())
                                 params.put(entry.getKey(), entry.getValue());
+                        }
                         updateRequestBuilder.setScriptParams(params);
                         currentRequest.add(updateRequestBuilder);
                         break;
@@ -282,6 +287,16 @@ public class ElasticSearchBulk extends BaseStep implements StepInterface {
             throw new KettleStepException(BaseMessages.getString(PKG, "ElasticSearchBulkDialog.Error.NoNodesFound"));
         } catch (Exception e) {
             throw new KettleStepException(BaseMessages.getString(PKG, "ElasticSearchBulk.Log.Exception", e.getLocalizedMessage()), e);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> getMapFromJsonString(Object[] row) throws KettleStepException {
+        String jsonString = (String) row[jsonFieldIdx];
+        try {
+            return mapper.readValue(jsonString, Map.class);
+        } catch (IOException ignored) {
+            throw new KettleStepException(BaseMessages.getString("ElasticSearchBulk.Error.NoJsonFieldFormat"));
         }
     }
 
@@ -359,6 +374,12 @@ public class ElasticSearchBulk extends BaseStep implements StepInterface {
                 OpType.CREATE;
     }
 
+    @Override
+    public void setErrors(long e) {
+        if (!getStepMeta().isDoingErrorHandling() || stopOnError)
+            super.setErrors(e);
+    }
+
     private boolean processBatch(boolean makeNew) {
 
         ListenableActionFuture<BulkResponse> actionFuture = currentRequest.execute();
@@ -430,7 +451,7 @@ public class ElasticSearchBulk extends BaseStep implements StepInterface {
         if (useOutput) setLinesOutput(getLinesOutput() + linesOK);
         else setLinesWritten(getLinesWritten() + linesOK);
 
-        return !hasErrors;
+        return !hasErrors || !stopOnError;
     }
 
     private void addIdToRow(String id, int rowIndex) {
@@ -457,7 +478,6 @@ public class ElasticSearchBulk extends BaseStep implements StepInterface {
 
     private void rejectRow(int index, String errorMsg) {
         try {
-
             putError(getInputRowMeta(), data.inputRowBuffer[index], 1, errorMsg, null, INSERT_ERROR_CODE);
 
         } catch (KettleStepException e) {

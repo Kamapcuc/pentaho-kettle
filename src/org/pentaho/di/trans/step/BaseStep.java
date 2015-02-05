@@ -1439,15 +1439,14 @@ public class BaseStep implements VariableSpace, StepInterface, LoggingObjectInte
 
     if (errorRowMeta == null) {
       errorRowMeta = rowMeta.clone();
-
-      RowMetaInterface add = stepErrorMeta.getErrorRowMeta(nrErrors, errorDescriptions, fieldNames, errorCodes);
-      errorRowMeta.addRowMeta(add);
+      errorRowMeta.addValueMeta(new ValueMeta("errorDescription", ValueMetaInterface.TYPE_STRING));
     }
 
     Object[] errorRowData = RowDataUtil.allocateRowData(errorRowMeta.size());
     if (row != null) {
       System.arraycopy(row, 0, errorRowData, 0, rowMeta.size());
     }
+    errorRowData[errorRowMeta.size() - 1] = errorDescriptions;
 
     // Also add the error fields...
     stepErrorMeta.addErrorRowData(errorRowData, rowMeta.size(), nrErrors, errorDescriptions, fieldNames, errorCodes);
