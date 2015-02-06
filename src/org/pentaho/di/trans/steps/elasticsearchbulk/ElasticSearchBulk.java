@@ -420,7 +420,7 @@ public class ElasticSearchBulk extends BaseStep implements StepInterface {
 
         boolean hasErrors = response.hasFailures();
 
-        if (hasErrors) {
+        if (hasErrors && !getStepMeta().isDoingErrorHandling()) {
             logError(response.buildFailureMessage());
         }
 
@@ -429,11 +429,11 @@ public class ElasticSearchBulk extends BaseStep implements StepInterface {
         if (hasErrors || useOutput) {
             for (BulkItemResponse item : response) {
                 if (item.isFailed()) {
-                    // log
-                    logDetailed(item.getFailureMessage());
-                    errorsInBatch++;
                     if (getStepMeta().isDoingErrorHandling()) {
                         rejectRow(item.getItemId(), item.getFailureMessage());
+                    } else {
+                        logDetailed(item.getFailureMessage());
+                        errorsInBatch++;
                     }
                 } else if (useOutput) {
                     if (idOutFieldName != null) {
